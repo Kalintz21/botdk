@@ -1,10 +1,10 @@
 /*
-Bot Node.js completo com Slash Commands, auto-resposta e CleanMakki persistente com logs detalhados
-Mantém status + heartbeat + Express + modo de teste CleanMakki
+Bot Node.js completo com Slash Commands, auto-resposta e CleanMakki persistente
+Mantém status + heartbeat + Express + logs detalhados
 */
 
 const { Client, GatewayIntentBits, ActivityType, REST, Routes, SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, NoSubscriberBehavior, AudioPlayerStatus } = require('@discordjs/voice');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior } = require('@discordjs/voice');
 const sodium = require('libsodium-wrappers'); // Necessário para áudio
 require('dotenv').config();
 const express = require('express');
@@ -106,6 +106,7 @@ client.once('ready', async () => {
   await sodium.ready;
   console.log('[INFO] libsodium-wrappers carregado e pronto para uso');
 
+  // Detecta mensagens antigas do Makki ao iniciar
   const channel = client.channels.cache.get('1300277156621975632'); // Canal do Makki
   if (channel) cleanMakkiOnStartup(channel);
 });
@@ -127,35 +128,17 @@ client.on('interactionCreate', async interaction => {
     const mensagem = interaction.options.getString('mensagem');
     await interaction.reply(`🗣️ Polaco diz: ${mensagem}`);
   } else if (commandName === 'guardian') {
-    const member = interaction.member;
-    if (!member.voice.channel) {
-      await interaction.reply('Você precisa estar em um canal de voz!');
-      return;
+    try {
+      await interaction.deferReply();
+      await connectVoice(interaction.member);
+      await interaction.editReply(`✅ Conectado ao canal de voz: ${interaction.member.voice.channel.name} (permanecerá conectado)`);
+    } catch (err) {
+      console.error('[GUARDIAN ERROR]', err);
+      await interaction.followUp('❌ Não foi possível conectar ao canal de voz.');
     }
-
-    await interaction.deferReply();
-
-    const connection = joinVoiceChannel({
-      channelId: member.voice.channel.id,
-      guildId: member.guild.id,
-      adapterCreator: member.guild.voiceAdapterCreator,
-    });
-
-    const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
-    let resource = createAudioResource(path.join(__dirname, 'silence.mp3'));
-    player.play(resource);
-
-    player.on(AudioPlayerStatus.Idle, () => {
-      resource = createAudioResource(path.join(__dirname, 'silence.mp3'));
-      player.play(resource);
-    });
-
-    connection.subscribe(player);
-
-    await interaction.editReply(`✅ Conectado ao canal de voz: ${member.voice.channel.name} (permanecerá conectado)`);
   } else if (commandName === 'cleanmakki') {
     const messages = await interaction.channel.messages.fetch({ limit: 50 });
-    const makkiMessage = messages.find(msg => msg.author.bot && makkiPatterns.every(pattern => pattern.test(msg.content)));
+    const makkiMessage = messages.find(msg => msg.author.bot && isMakkiMessage(msg));
 
     if (makkiMessage) {
       await makkiMessage.delete().catch(() => {});
@@ -186,14 +169,16 @@ client.on('messageCreate', async message => {
 
 // ---------- CLEANMAKKI ----------
 const makkiPatterns = [
-  /Vocês gostam da nossa comunidade/i,
-  /DK/i,
-  /convide seus amigos/i
+  'Vocês gostam da nossa comunidade',
+  'DK',
+  'convide seus amigos'
 ];
 
-// ---------- MODO DE TESTE ----------
-const TEST_MODE = true; // true = 10 segundos, false = 15 minutos
-const DELETE_DELAY = TEST_MODE ? 10 * 1000 : 15 * 60 * 1000;
+function isMakkiMessage(msg) {
+  return makkiPatterns.every(p => msg.content.includes(p));
+}
+
+const DELETE_DELAY = 15 * 60 * 1000; // 15 minutos
 
 function scheduleMakkiDeletion(msg, delayMs) {
   const deleteTime = new Date(Date.now() + delayMs);
@@ -209,9 +194,7 @@ function scheduleMakkiDeletion(msg, delayMs) {
 
 // Mensagens novas
 client.on('messageCreate', async message => {
-  if (!message.author.bot) return;
-
-  if (makkiPatterns.every(p => p.test(message.content))) {
+  if (message.author.bot && isMakkiMessage(message)) {
     scheduleMakkiDeletion(message, DELETE_DELAY);
   }
 });
@@ -219,15 +202,44 @@ client.on('messageCreate', async message => {
 // Mensagens antigas ao iniciar
 async function cleanMakkiOnStartup(channel) {
   const messages = await channel.messages.fetch({ limit: 100 });
-
   messages.forEach(msg => {
-    if (msg.author.bot && makkiPatterns.every(p => p.test(msg.content))) {
+    if (msg.author.bot && isMakkiMessage(msg)) {
       const now = Date.now();
       const diff = now - msg.createdTimestamp;
       const delay = Math.max(DELETE_DELAY - diff, 0);
       scheduleMakkiDeletion(msg, delay);
     }
   });
+}
+
+// ---------- VOICE CONNECTION ----------
+async function connectVoice(member) {
+  if (!member.voice.channel) throw new Error('O usuário não está em nenhum canal de voz');
+
+  const connection = joinVoiceChannel({
+    channelId: member.voice.channel.id,
+    guildId: member.guild.id,
+    adapterCreator: member.guild.voiceAdapterCreator,
+    selfDeaf: false
+  });
+
+  const player = createAudioPlayer({
+    behaviors: { noSubscriber: NoSubscriberBehavior.Play }
+  });
+
+  function playSilence() {
+    const resource = createAudioResource(path.join(__dirname, 'silence.mp3'));
+    player.play(resource);
+  }
+
+  player.on(AudioPlayerStatus.Idle, () => {
+    playSilence(); // Loop contínuo de áudio silencioso
+  });
+
+  connection.subscribe(player);
+  playSilence();
+
+  console.log(`[VOICE] Bot conectado em ${member.voice.channel.name} e permanecerá conectado.`);
 }
 
 // ---------- LOGIN ----------
