@@ -1,6 +1,6 @@
 /*
 Bot Node.js completo com Slash Commands, auto-resposta e CleanMakki persistente com logs detalhados
-Mantém status + heartbeat + Express
+Mantém status + heartbeat + Express + modo de teste CleanMakki
 */
 
 const { Client, GatewayIntentBits, ActivityType, REST, Routes, SlashCommandBuilder, EmbedBuilder } = require('discord.js');
@@ -191,6 +191,10 @@ const makkiPatterns = [
   /convide seus amigos/i
 ];
 
+// ---------- MODO DE TESTE ----------
+const TEST_MODE = true; // true = 10 segundos, false = 15 minutos
+const DELETE_DELAY = TEST_MODE ? 10 * 1000 : 15 * 60 * 1000;
+
 function scheduleMakkiDeletion(msg, delayMs) {
   const deleteTime = new Date(Date.now() + delayMs);
   console.log(`[CLEANMAKKI] Mensagem do Makki agendada para deletar em ${deleteTime.toLocaleTimeString()}`);
@@ -208,7 +212,7 @@ client.on('messageCreate', async message => {
   if (!message.author.bot) return;
 
   if (makkiPatterns.every(p => p.test(message.content))) {
-    scheduleMakkiDeletion(message, 15 * 60 * 1000); // 15 minutos
+    scheduleMakkiDeletion(message, DELETE_DELAY);
   }
 });
 
@@ -220,7 +224,7 @@ async function cleanMakkiOnStartup(channel) {
     if (msg.author.bot && makkiPatterns.every(p => p.test(msg.content))) {
       const now = Date.now();
       const diff = now - msg.createdTimestamp;
-      const delay = Math.max(15 * 60 * 1000 - diff, 0);
+      const delay = Math.max(DELETE_DELAY - diff, 0);
       scheduleMakkiDeletion(msg, delay);
     }
   });
