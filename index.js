@@ -5,6 +5,7 @@ Mantém status + heartbeat + Express
 
 const { Client, GatewayIntentBits, ActivityType, REST, Routes, SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, NoSubscriberBehavior, AudioPlayerStatus } = require('@discordjs/voice');
+const sodium = require('libsodium-wrappers'); // Necessário para áudio
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
@@ -81,13 +82,30 @@ async function registerCommands() {
   }
 }
 
-// ---------- EVENTOS ----------
-client.once('ready', () => {
+// ---------- LOGIN ----------
+async function login() {
+  try {
+    await client.login(process.env.TOKEN);
+    console.log(`Logged in as: ${client.user.tag} ✅`);
+    console.log(`Bot ID: ${client.user.id}`);
+    console.log(`Connected to ${client.guilds.cache.size} server(s)`);
+  } catch (error) {
+    console.error('Failed to log in:', error);
+    process.exit(1);
+  }
+}
+
+// ---------- READY ----------
+client.once('ready', async () => {
   console.log(`[INFO] Ping: ${client.ws.ping} ms`);
   updateStatus();
   setInterval(updateStatus, 10000);
   heartbeat();
   registerCommands();
+
+  // Inicializa libsodium para áudio
+  await sodium.ready;
+  console.log('[INFO] libsodium-wrappers carregado e pronto para uso');
 });
 
 // ---------- INTERAÇÕES DE SLASH ----------
@@ -119,18 +137,15 @@ client.on('interactionCreate', async interaction => {
       adapterCreator: member.guild.voiceAdapterCreator,
     });
 
-    // Player de áudio silencioso
     const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
     const resource = createAudioResource(path.join(__dirname, 'silence.mp3'));
     player.play(resource);
 
-    // Loop infinito
     player.on(AudioPlayerStatus.Idle, () => { player.play(resource); });
     connection.subscribe(player);
 
     await interaction.reply(`✅ Conectado ao canal de voz: ${member.voice.channel.name} (permanecerá conectado)`);
   } else if (commandName === 'cleanmakki') {
-    // Deleta última mensagem do Makki (teste)
     const messages = await interaction.channel.messages.fetch({ limit: 50 });
     const makkiMessage = messages.find(msg => msg.author.bot && makkiPatterns.every(pattern => pattern.test(msg.content)));
 
@@ -181,16 +196,4 @@ client.on('messageCreate', async message => {
 });
 
 // ---------- LOGIN ----------
-async function login() {
-  try {
-    await client.login(process.env.TOKEN);
-    console.log(`Logged in as: ${client.user.tag} ✅`);
-    console.log(`Bot ID: ${client.user.id}`);
-    console.log(`Connected to ${client.guilds.cache.size} server(s)`);
-  } catch (error) {
-    console.error('Failed to log in:', error);
-    process.exit(1);
-  }
-}
-
 login();
