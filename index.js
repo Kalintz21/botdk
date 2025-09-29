@@ -63,6 +63,7 @@ const commands = [
   new SlashCommandBuilder().setName('falar').setDescription('Bot repete a mensagem')
     .addStringOption(option => option.setName('mensagem').setDescription('Mensagem a enviar').setRequired(true)),
   new SlashCommandBuilder().setName('guardian').setDescription('Conecta o bot em um canal de voz'),
+  new SlashCommandBuilder().setName('cleanmakki').setDescription('Deleta a última mensagem do Makki imediatamente (teste)'),
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -128,6 +129,17 @@ client.on('interactionCreate', async interaction => {
     connection.subscribe(player);
 
     await interaction.reply(`✅ Conectado ao canal de voz: ${member.voice.channel.name} (permanecerá conectado)`);
+  } else if (commandName === 'cleanmakki') {
+    // Deleta última mensagem do Makki (teste)
+    const messages = await interaction.channel.messages.fetch({ limit: 50 });
+    const makkiMessage = messages.find(msg => msg.author.bot && makkiPatterns.every(pattern => pattern.test(msg.content)));
+
+    if (makkiMessage) {
+      await makkiMessage.delete().catch(() => {});
+      await interaction.reply('🧹 Última mensagem do Makki deletada com sucesso!');
+    } else {
+      await interaction.reply('❌ Nenhuma mensagem do Makki encontrada nas últimas 50 mensagens.');
+    }
   }
 });
 
@@ -160,7 +172,11 @@ client.on('messageCreate', async message => {
 
   const matches = makkiPatterns.every(pattern => pattern.test(message.content));
   if (matches) {
-    setTimeout(() => message.delete().catch(() => {}), 10 * 60 * 1000); // 10 minutos
+    setTimeout(() => {
+      message.delete()
+        .then(() => console.log(`[CLEANMAKKI] Mensagem do Makki deletada: "${message.content}"`))
+        .catch(() => console.log('[CLEANMAKKI] Não foi possível deletar a mensagem.'));
+    }, 15 * 60 * 1000); // 15 minutos
   }
 });
 
