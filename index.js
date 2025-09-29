@@ -1,6 +1,7 @@
 /*
 Bot Node.js completo com Slash Commands, auto-resposta e CleanMakki persistente
 Mantém status + heartbeat + Express + logs detalhados
+Modo de teste: mensagens do Makki deletadas após 30 segundos
 */
 
 const { Client, GatewayIntentBits, ActivityType, REST, Routes, SlashCommandBuilder, EmbedBuilder } = require('discord.js');
@@ -73,7 +74,7 @@ async function registerCommands() {
   try {
     console.log('[SLASH] Registrando comandos no servidor...');
     await rest.put(
-      Routes.applicationGuildCommands(process.env.CLIENT_ID, '1300277156621975632'),
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
       { body: commands }
     );
     console.log('[SLASH] Comandos registrados ✅');
@@ -107,7 +108,7 @@ client.once('ready', async () => {
   console.log('[INFO] libsodium-wrappers carregado e pronto para uso');
 
   // Detecta mensagens antigas do Makki ao iniciar
-  const channel = client.channels.cache.get('1300277156621975632'); // Canal do Makki
+  const channel = client.channels.cache.get('1300277158165614699'); // ID do canal do Makki
   if (channel) cleanMakkiOnStartup(channel);
 });
 
@@ -178,8 +179,9 @@ function isMakkiMessage(msg) {
   return makkiPatterns.every(p => msg.content.includes(p));
 }
 
-// 🔹 ALTERADO PARA 2 HORAS
-const DELETE_DELAY = 2 * 60 * 60 * 1000; // 2 horas
+// 🔹 MODO DE TESTE ATIVADO
+const TEST_MODE = true; // true = 30 segundos para teste
+const DELETE_DELAY = TEST_MODE ? 30 * 1000 : 60 * 60 * 1000; // 30s ou 1h
 
 function scheduleMakkiDeletion(msg, delayMs) {
   const deleteTime = new Date(Date.now() + delayMs);
