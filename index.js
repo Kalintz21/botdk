@@ -1,5 +1,5 @@
 /*
-Bot Node.js completo com Slash Commands, auto-resposta e cleanmakki automático
+Bot Node.js completo com Slash Commands, auto-resposta e cleanmakki robusto
 Mantém status + heartbeat + Express
 */
 
@@ -9,7 +9,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 
-// ---------- CONFIGURAÇÃO DO CLIENT ----------
+// ---------- CLIENT ----------
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -19,7 +19,7 @@ const client = new Client({
   ],
 });
 
-// ---------- SERVIDOR EXPRESS ----------
+// ---------- EXPRESS SERVER ----------
 const app = express();
 const port = 3000;
 app.get('/', (req, res) => {
@@ -62,8 +62,7 @@ const commands = [
   new SlashCommandBuilder().setName('avatar').setDescription('Mostra avatar de um usuário').addUserOption(option => option.setName('usuario').setDescription('Usuário para mostrar o avatar')),
   new SlashCommandBuilder().setName('falar').setDescription('Bot repete a mensagem').addStringOption(option => option.setName('mensagem').setDescription('Mensagem a enviar').setRequired(true)),
   new SlashCommandBuilder().setName('guardian').setDescription('Conecta o bot em um canal de voz'),
-]
-  .map(command => command.toJSON());
+].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
@@ -89,7 +88,7 @@ client.once('ready', () => {
   registerCommands();
 });
 
-// ---------- INTERAÇÕES DE SLASH COMMAND ----------
+// ---------- INTERAÇÕES DE SLASH ----------
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -115,7 +114,6 @@ client.on('interactionCreate', async interaction => {
   }
 
   else if (commandName === 'guardian') {
-    // Conecta no canal de voz que o usuário está
     const member = interaction.member;
     if (!member.voice.channel) {
       await interaction.reply('Você precisa estar em um canal de voz para que eu possa conectar!');
@@ -131,11 +129,10 @@ client.on('interactionCreate', async interaction => {
 });
 
 // ---------- AUTO-RESPOSTA PARA MENÇÃO DO DEV ----------
+const devID = '711382505558638612';
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
 
-  // Auto-resposta quando mencionam seu ID
-  const devID = '711382505558638612';
   if (message.mentions.users.has(devID)) {
     const embed = new EmbedBuilder()
       .setColor(0x0099FF)
@@ -143,15 +140,24 @@ client.on('messageCreate', async message => {
       .setDescription(`Olá, vejo que você citou o nome do meu desenvolvedor, se precisar de ajuda vá ao canal de <#1300277158819795013>`)
       .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
       .setFooter({ text: `Mensagem enviada automaticamente` });
-
     const sentMsg = await message.channel.send({ content: `<@${message.author.id}>`, embeds: [embed] });
-    setTimeout(() => sentMsg.delete().catch(() => {}), 5 * 60 * 1000); // Deleta após 5 min
+    setTimeout(() => sentMsg.delete().catch(() => {}), 5 * 60 * 1000); // 5 minutos
   }
+});
 
-  // ---------- CLEANMAKKI AUTOMÁTICO ----------
-  const makkiContent = 'Vocês gostam da nossa comunidade?';
-  if (message.author.bot && message.content.includes(makkiContent)) {
-    setTimeout(() => message.delete().catch(() => {}), 10000); // Deleta após 10s
+// ---------- CLEANMAKKI AUTOMÁTICO ----------
+const makkiContentKeywords = [
+  "Vocês gostam da nossa comunidade",
+  "DK",
+  "convide seus amigos"
+];
+
+client.on('messageCreate', async message => {
+  if (message.author.bot) {
+    const content = message.content.toLowerCase();
+    if (makkiContentKeywords.every(keyword => content.includes(keyword.toLowerCase()))) {
+      setTimeout(() => message.delete().catch(() => {}), 5 * 60 * 1000); // 5 minutos
+    }
   }
 });
 
