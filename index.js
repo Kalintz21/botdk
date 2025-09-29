@@ -178,7 +178,8 @@ function isMakkiMessage(msg) {
   return makkiPatterns.every(p => msg.content.includes(p));
 }
 
-const DELETE_DELAY = 15 * 60 * 1000; // 15 minutos
+// 🔹 ALTERADO PARA 2 HORAS
+const DELETE_DELAY = 2 * 60 * 60 * 1000; // 2 horas
 
 function scheduleMakkiDeletion(msg, delayMs) {
   const deleteTime = new Date(Date.now() + delayMs);
