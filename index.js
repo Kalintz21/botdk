@@ -131,6 +131,8 @@ client.on('interactionCreate', async interaction => {
       return;
     }
 
+    await interaction.deferReply(); // evita erro de interação duplicada
+
     const connection = joinVoiceChannel({
       channelId: member.voice.channel.id,
       guildId: member.guild.id,
@@ -138,13 +140,17 @@ client.on('interactionCreate', async interaction => {
     });
 
     const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
-    const resource = createAudioResource(path.join(__dirname, 'silence.mp3'));
+    let resource = createAudioResource(path.join(__dirname, 'silence.mp3'));
     player.play(resource);
 
-    player.on(AudioPlayerStatus.Idle, () => { player.play(resource); });
+    player.on(AudioPlayerStatus.Idle, () => {
+      resource = createAudioResource(path.join(__dirname, 'silence.mp3')); // novo recurso
+      player.play(resource);
+    });
+
     connection.subscribe(player);
 
-    await interaction.reply(`✅ Conectado ao canal de voz: ${member.voice.channel.name} (permanecerá conectado)`);
+    await interaction.editReply(`✅ Conectado ao canal de voz: ${member.voice.channel.name} (permanecerá conectado)`);
   } else if (commandName === 'cleanmakki') {
     const messages = await interaction.channel.messages.fetch({ limit: 50 });
     const makkiMessage = messages.find(msg => msg.author.bot && makkiPatterns.every(pattern => pattern.test(msg.content)));
