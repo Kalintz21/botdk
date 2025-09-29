@@ -1,5 +1,5 @@
 /*
-Bot Node.js completo com Slash Commands, auto-resposta e CleanMakki
+Bot Node.js completo com Slash Commands, auto-resposta e CleanMakki persistente com logs detalhados
 Mantém status + heartbeat + Express
 */
 
@@ -103,9 +103,11 @@ client.once('ready', async () => {
   heartbeat();
   registerCommands();
 
-  // Inicializa libsodium para áudio
   await sodium.ready;
   console.log('[INFO] libsodium-wrappers carregado e pronto para uso');
+
+  const channel = client.channels.cache.get('1300277156621975632'); // Canal do Makki
+  if (channel) cleanMakkiOnStartup(channel);
 });
 
 // ---------- INTERAÇÕES DE SLASH ----------
@@ -127,11 +129,11 @@ client.on('interactionCreate', async interaction => {
   } else if (commandName === 'guardian') {
     const member = interaction.member;
     if (!member.voice.channel) {
-      await interaction.reply('Você precisa estar em um canal de voz para que eu possa conectar!');
+      await interaction.reply('Você precisa estar em um canal de voz!');
       return;
     }
 
-    await interaction.deferReply(); // evita erro de interação duplicada
+    await interaction.deferReply();
 
     const connection = joinVoiceChannel({
       channelId: member.voice.channel.id,
@@ -144,7 +146,7 @@ client.on('interactionCreate', async interaction => {
     player.play(resource);
 
     player.on(AudioPlayerStatus.Idle, () => {
-      resource = createAudioResource(path.join(__dirname, 'silence.mp3')); // novo recurso
+      resource = createAudioResource(path.join(__dirname, 'silence.mp3'));
       player.play(resource);
     });
 
@@ -176,30 +178,53 @@ client.on('messageCreate', async message => {
       .setDescription(`Olá, vejo que você citou o nome do meu desenvolvedor, se precisar de ajuda vá ao canal de <#1300277158819795013>`)
       .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
       .setFooter({ text: `Mensagem enviada automaticamente` });
+
     const sentMsg = await message.channel.send({ content: `<@${message.author.id}>`, embeds: [embed] });
     setTimeout(() => sentMsg.delete().catch(() => {}), 5 * 60 * 1000); // 5 minutos
   }
 });
 
-// ---------- CLEANMAKKI AUTOMÁTICO ----------
+// ---------- CLEANMAKKI ----------
 const makkiPatterns = [
   /Vocês gostam da nossa comunidade/i,
   /DK/i,
   /convide seus amigos/i
 ];
 
+function scheduleMakkiDeletion(msg, delayMs) {
+  const deleteTime = new Date(Date.now() + delayMs);
+  console.log(`[CLEANMAKKI] Mensagem do Makki agendada para deletar em ${deleteTime.toLocaleTimeString()}`);
+  console.log(`[CLEANMAKKI] Conteúdo: "${msg.content.slice(0, 50)}..."`);
+
+  setTimeout(() => {
+    msg.delete()
+      .then(() => console.log(`[CLEANMAKKI] Mensagem deletada: "${msg.content.slice(0, 50)}..."`))
+      .catch(() => console.log('[CLEANMAKKI] Não foi possível deletar a mensagem.'));
+  }, delayMs);
+}
+
+// Mensagens novas
 client.on('messageCreate', async message => {
   if (!message.author.bot) return;
 
-  const matches = makkiPatterns.every(pattern => pattern.test(message.content));
-  if (matches) {
-    setTimeout(() => {
-      message.delete()
-        .then(() => console.log(`[CLEANMAKKI] Mensagem do Makki deletada: "${message.content}"`))
-        .catch(() => console.log('[CLEANMAKKI] Não foi possível deletar a mensagem.'));
-    }, 15 * 60 * 1000); // 15 minutos
+  if (makkiPatterns.every(p => p.test(message.content))) {
+    scheduleMakkiDeletion(message, 15 * 60 * 1000); // 15 minutos
   }
 });
+
+// Mensagens antigas ao iniciar
+async function cleanMakkiOnStartup(channel) {
+  const messages = await channel.messages.fetch({ limit: 100 });
+
+  messages.forEach(msg => {
+    if (msg.author.bot && makkiPatterns.every(p => p.test(msg.content))) {
+      const now = Date.now();
+      const diff = now - msg.createdTimestamp;
+      const delay = Math.max(15 * 60 * 1000 - diff, 0);
+      scheduleMakkiDeletion(msg, delay);
+    }
+  });
+}
 
 // ---------- LOGIN ----------
 login();
