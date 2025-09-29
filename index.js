@@ -1,10 +1,10 @@
 /*
-Bot Node.js completo com Slash Commands, auto-resposta e cleanmakki robusto
+Bot Node.js completo com Slash Commands, auto-resposta e CleanMakki
 Mantém status + heartbeat + Express
 */
 
 const { Client, GatewayIntentBits, ActivityType, REST, Routes, SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { joinVoiceChannel } = require('@discordjs/voice');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, NoSubscriberBehavior, AudioPlayerStatus } = require('@discordjs/voice');
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
@@ -23,8 +23,7 @@ const client = new Client({
 const app = express();
 const port = 3000;
 app.get('/', (req, res) => {
-  const imagePath = path.join(__dirname, 'index.html');
-  res.sendFile(imagePath);
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 app.listen(port, () => {
   console.log('[SERVER] SH : http://localhost:' + port + ' ✅');
@@ -59,8 +58,10 @@ function heartbeat() {
 const commands = [
   new SlashCommandBuilder().setName('polaco').setDescription('Polaco Guardian está ativo! ✅'),
   new SlashCommandBuilder().setName('dk').setDescription('Mostra informações do servidor'),
-  new SlashCommandBuilder().setName('avatar').setDescription('Mostra avatar de um usuário').addUserOption(option => option.setName('usuario').setDescription('Usuário para mostrar o avatar')),
-  new SlashCommandBuilder().setName('falar').setDescription('Bot repete a mensagem').addStringOption(option => option.setName('mensagem').setDescription('Mensagem a enviar').setRequired(true)),
+  new SlashCommandBuilder().setName('avatar').setDescription('Mostra avatar de um usuário')
+    .addUserOption(option => option.setName('usuario').setDescription('Usuário para mostrar o avatar')),
+  new SlashCommandBuilder().setName('falar').setDescription('Bot repete a mensagem')
+    .addStringOption(option => option.setName('mensagem').setDescription('Mensagem a enviar').setRequired(true)),
   new SlashCommandBuilder().setName('guardian').setDescription('Conecta o bot em um canal de voz'),
 ].map(command => command.toJSON());
 
@@ -91,40 +92,42 @@ client.once('ready', () => {
 // ---------- INTERAÇÕES DE SLASH ----------
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
-
   const { commandName } = interaction;
 
   if (commandName === 'polaco') {
     await interaction.reply('Polaco Guardian está ativo! ✅');
-  }
-
-  else if (commandName === 'dk') {
+  } else if (commandName === 'dk') {
     const guild = interaction.guild;
     await interaction.reply(`🏰 Servidor: ${guild.name}\nID: ${guild.id}\nMembros: ${guild.memberCount}\nCriado em: ${guild.createdAt.toLocaleDateString()}`);
-  }
-
-  else if (commandName === 'avatar') {
+  } else if (commandName === 'avatar') {
     const user = interaction.options.getUser('usuario') || interaction.user;
     await interaction.reply({ content: `${user.tag}`, files: [user.displayAvatarURL({ dynamic: true, size: 1024 })] });
-  }
-
-  else if (commandName === 'falar') {
+  } else if (commandName === 'falar') {
     const mensagem = interaction.options.getString('mensagem');
     await interaction.reply(`🗣️ Polaco diz: ${mensagem}`);
-  }
-
-  else if (commandName === 'guardian') {
+  } else if (commandName === 'guardian') {
     const member = interaction.member;
     if (!member.voice.channel) {
       await interaction.reply('Você precisa estar em um canal de voz para que eu possa conectar!');
       return;
     }
-    joinVoiceChannel({
+
+    const connection = joinVoiceChannel({
       channelId: member.voice.channel.id,
       guildId: member.guild.id,
       adapterCreator: member.guild.voiceAdapterCreator,
     });
-    await interaction.reply(`✅ Conectado ao canal de voz: ${member.voice.channel.name}`);
+
+    // Player de áudio silencioso
+    const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
+    const resource = createAudioResource(path.join(__dirname, 'silence.mp3'));
+    player.play(resource);
+
+    // Loop infinito
+    player.on(AudioPlayerStatus.Idle, () => { player.play(resource); });
+    connection.subscribe(player);
+
+    await interaction.reply(`✅ Conectado ao canal de voz: ${member.voice.channel.name} (permanecerá conectado)`);
   }
 });
 
@@ -146,18 +149,18 @@ client.on('messageCreate', async message => {
 });
 
 // ---------- CLEANMAKKI AUTOMÁTICO ----------
-const makkiContentKeywords = [
-  "Vocês gostam da nossa comunidade",
-  "DK",
-  "convide seus amigos"
+const makkiPatterns = [
+  /Vocês gostam da nossa comunidade/i,
+  /DK/i,
+  /convide seus amigos/i
 ];
 
 client.on('messageCreate', async message => {
-  if (message.author.bot) {
-    const content = message.content.toLowerCase();
-    if (makkiContentKeywords.every(keyword => content.includes(keyword.toLowerCase()))) {
-      setTimeout(() => message.delete().catch(() => {}), 5 * 60 * 1000); // 5 minutos
-    }
+  if (!message.author.bot) return;
+
+  const matches = makkiPatterns.every(pattern => pattern.test(message.content));
+  if (matches) {
+    setTimeout(() => message.delete().catch(() => {}), 10 * 60 * 1000); // 10 minutos
   }
 });
 
