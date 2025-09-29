@@ -164,7 +164,7 @@ client.on('messageCreate', async message => {
       .setFooter({ text: `Mensagem enviada automaticamente` });
 
     const sentMsg = await message.channel.send({ content: `<@${message.author.id}>`, embeds: [embed] });
-    setTimeout(() => sentMsg.delete().catch(() => {}), 5 * 60 * 1000); // 5 minutos
+    setTimeout(() => sentMsg.delete().catch(() => {}), 1 * 60 * 1000); // 5 minutos
   }
 });
 
@@ -180,7 +180,7 @@ function isMakkiMessage(msg) {
 }
 
 // 🔹 MODO DE TESTE ATIVADO
-const TEST_MODE = true; // true = 30 segundos para teste
+const TEST_MODE = false; // true = 30 segundos para teste
 const DELETE_DELAY = TEST_MODE ? 30 * 1000 : 60 * 60 * 1000; // 30s ou 1h
 
 function scheduleMakkiDeletion(msg, delayMs) {
